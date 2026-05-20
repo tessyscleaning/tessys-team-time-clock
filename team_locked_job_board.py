@@ -21,13 +21,12 @@ TEAM_PINS = {
 }
 
 EMPLOYEES = [
-    "Employee 1",
-    "Employee 2",
-    "Employee 3",
-    "Employee 4",
-    "Employee 5",
-    "Employee 6",
-    "Employee 7",
+    "Kenny G Galindo Gomez",
+    "Iris L Rivas Martinez",
+    "Yesenia Chavez",
+    "Lidia I Figueroa Campos",
+    "Olivia Rosales",
+    "Yohana Beatriz Ticas Contreras",
 ]
 
 TEAMS = {
