@@ -2,6 +2,7 @@ import streamlit as st
 from datetime import datetime, date
 from zoneinfo import ZoneInfo
 from pathlib import Path
+from urllib.parse import quote
 import pandas as pd
 
 st.set_page_config(page_title="Tessy's Team-Locked Job Board", page_icon="🧽", layout="centered")
@@ -49,8 +50,11 @@ def load_time_log():
         for col in TIME_COLUMNS:
             if col not in df.columns:
                 df[col] = ""
-        return df
+        return df[TIME_COLUMNS]
     return pd.DataFrame(columns=TIME_COLUMNS)
+
+def save_time_log(df):
+    df.to_csv(TIME_LOG_FILE, index=False)
 
 def save_time_event(event_type, employees, team, job_row, employee_notes):
     now = local_now()
@@ -71,7 +75,7 @@ def save_time_event(event_type, employees, team, job_row, employee_notes):
             "Employee Notes": employee_notes
         })
     final = pd.concat([load_time_log(), pd.DataFrame(rows)], ignore_index=True)
-    final.to_csv(TIME_LOG_FILE, index=False)
+    save_time_log(final)
 
 st.markdown("""
 # 🧽 Tessy's Team Job Board
@@ -186,11 +190,69 @@ if mode == "Admin Login":
     elif page == "Time Logs":
         st.header("Time Logs")
         logs = load_time_log()
+
         if logs.empty:
             st.write("No time records yet.")
         else:
-            st.dataframe(logs.sort_values(by="Timestamp", ascending=False), use_container_width=True)
-            st.download_button("⬇️ Download Time Log", data=logs.to_csv(index=False).encode("utf-8"), file_name="team_time_log.csv", mime="text/csv")
+            filter_log_date = st.date_input("Filter Logs by Date", value=date.today())
+            filter_log_team = st.selectbox("Filter Logs by Team", ["All Teams"] + list(TEAMS.keys()))
+
+            filtered_logs = logs[logs["Date"] == filter_log_date.strftime("%Y-%m-%d")]
+            if filter_log_team != "All Teams":
+                filtered_logs = filtered_logs[filtered_logs["Team"] == filter_log_team]
+
+            st.subheader("Filtered Time Logs")
+            st.dataframe(filtered_logs.sort_values(by="Timestamp", ascending=False), use_container_width=True)
+
+            st.download_button("⬇️ Download All Time Logs", data=logs.to_csv(index=False).encode("utf-8"), file_name="team_time_log.csv", mime="text/csv")
+
+            st.divider()
+            st.subheader("Delete One Time Log Entry")
+            if filtered_logs.empty:
+                st.info("No time logs match this filter.")
+            else:
+                log_options = []
+                for idx, row in filtered_logs.iterrows():
+                    label = f"{row['Date']} | {row['Time']} | {row['Event']} | {row['Employee Name']} | {row['Team']} | {row['Client Name']}"
+                    log_options.append((idx, label))
+
+                selected_log_idx = st.selectbox(
+                    "Select time log entry to delete",
+                    options=[x[0] for x in log_options],
+                    format_func=lambda x: dict(log_options)[x]
+                )
+
+                confirm_log_delete = st.checkbox("I understand this will delete the selected time log.")
+                if st.button("🗑️ Delete Selected Time Log"):
+                    if confirm_log_delete:
+                        logs = logs.drop(index=selected_log_idx).reset_index(drop=True)
+                        save_time_log(logs)
+                        st.success("Selected time log deleted. Refresh if needed.")
+                    else:
+                        st.error("Please check the confirmation box first.")
+
+            st.divider()
+            st.subheader("Clear Time Logs")
+            col1, col2 = st.columns(2)
+
+            with col1:
+                confirm_clear_filtered_logs = st.checkbox("Confirm clear filtered time logs")
+                if st.button("🧹 Clear Filtered Time Logs"):
+                    if confirm_clear_filtered_logs:
+                        logs = logs.drop(index=filtered_logs.index).reset_index(drop=True)
+                        save_time_log(logs)
+                        st.success("Filtered time logs cleared.")
+                    else:
+                        st.error("Please confirm first.")
+
+            with col2:
+                confirm_clear_all_logs = st.checkbox("Confirm clear ALL time logs")
+                if st.button("🚨 Clear ALL Time Logs"):
+                    if confirm_clear_all_logs:
+                        save_time_log(pd.DataFrame(columns=TIME_COLUMNS))
+                        st.success("All time logs cleared.")
+                    else:
+                        st.error("Please confirm first.")
 
 else:
     st.header("Team Login")
@@ -228,8 +290,16 @@ else:
     **Estimated Hours:** {job['Estimated Hours']}  
     **Notes:** {job['Job Notes']}
     """)
-    map_query = str(job["Address"]).replace(" ", "+")
-    st.markdown(f"[🗺️ Open in Google Maps](https://www.google.com/maps/search/?api=1&query={map_query})")
+
+    encoded_address = quote(str(job["Address"]))
+    google_maps = f"https://www.google.com/maps/search/?api=1&query={encoded_address}"
+    apple_maps = f"https://maps.apple.com/?q={encoded_address}"
+
+    col_map1, col_map2 = st.columns(2)
+    with col_map1:
+        st.markdown(f"[🗺️ Open in Google Maps]({google_maps})")
+    with col_map2:
+        st.markdown(f"[🍎 Open in Apple Maps]({apple_maps})")
 
     employee_notes = st.text_area("Employee Notes", placeholder="Add notes for this job, if needed.")
     st.divider()
