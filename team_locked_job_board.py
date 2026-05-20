@@ -3,22 +3,13 @@ from datetime import datetime, date
 from pathlib import Path
 import pandas as pd
 
-st.set_page_config(
-    page_title="Tessy's Team-Locked Job Board",
-    page_icon="🧽",
-    layout="centered"
-)
+st.set_page_config(page_title="Tessy's Team-Locked Job Board", page_icon="🧽", layout="centered")
 
 JOBS_FILE = Path("daily_jobs.csv")
 TIME_LOG_FILE = Path("team_time_log.csv")
 
 ADMIN_PIN = "5668"
-
-TEAM_PINS = {
-    "Team 1": "1111",
-    "Team 2": "2222",
-    "Team 3": "3333",
-}
+TEAM_PINS = {"Team 1": "1111", "Team 2": "2222", "Team 3": "3333"}
 
 EMPLOYEES = [
     "Kenny G Galindo Gomez",
@@ -35,24 +26,9 @@ TEAMS = {
     "Team 3": ["Lidia I Figueroa Campos"],
 }
 
-SERVICE_TYPES = [
-    "Recurring Cleaning",
-    "Deep Cleaning",
-    "Move-In / Move-Out",
-    "Window Washing",
-    "Other"
-]
-
-JOB_COLUMNS = [
-    "Date", "Start Time", "Client Name", "Address",
-    "Service Type", "Team", "Estimated Hours", "Job Notes"
-]
-
-TIME_COLUMNS = [
-    "Date", "Time", "Timestamp", "Event", "Employee Name",
-    "Team", "Client Name", "Job Address", "Service Type",
-    "Job Notes", "Employee Notes"
-]
+SERVICE_TYPES = ["Recurring Cleaning", "Deep Cleaning", "Move-In / Move-Out", "Window Washing", "Other"]
+JOB_COLUMNS = ["Date", "Start Time", "Client Name", "Address", "Service Type", "Team", "Estimated Hours", "Job Notes"]
+TIME_COLUMNS = ["Date", "Time", "Timestamp", "Event", "Employee Name", "Team", "Client Name", "Job Address", "Service Type", "Job Notes", "Employee Notes"]
 
 def load_jobs():
     if JOBS_FILE.exists():
@@ -70,7 +46,6 @@ def load_time_log():
 def save_time_event(event_type, employees, team, job_row, employee_notes):
     now = datetime.now()
     rows = []
-
     for employee in employees:
         rows.append({
             "Date": now.strftime("%Y-%m-%d"),
@@ -85,10 +60,7 @@ def save_time_event(event_type, employees, team, job_row, employee_notes):
             "Job Notes": job_row.get("Job Notes", ""),
             "Employee Notes": employee_notes
         })
-
-    old = load_time_log()
-    new = pd.DataFrame(rows)
-    final = pd.concat([old, new], ignore_index=True)
+    final = pd.concat([load_time_log(), pd.DataFrame(rows)], ignore_index=True)
     final.to_csv(TIME_LOG_FILE, index=False)
 
 st.markdown("""
@@ -97,27 +69,22 @@ st.markdown("""
 **Tessy's Residential Cleaning Service**  
 📞 925-349-5668
 """)
-
-st.info("Employees use their team PIN and only see their own team's jobs. Admin can add schedules and view all logs.")
-
+st.info("Employees use their team PIN and only see their own team's jobs. Admin can add, delete, and clear schedules.")
 st.divider()
 
 mode = st.radio("Login Type", ["Team Login", "Admin Login"], horizontal=True)
 
 if mode == "Admin Login":
     pin = st.text_input("Admin PIN", type="password")
-
     if pin != ADMIN_PIN:
         st.warning("Enter admin PIN to manage schedules.")
         st.stop()
 
     st.success("Admin access granted.")
-
-    page = st.sidebar.radio("Admin Menu", ["Add Jobs", "View Schedule", "Time Logs"])
+    page = st.sidebar.radio("Admin Menu", ["Add Jobs", "Manage Schedule", "Time Logs"])
 
     if page == "Add Jobs":
         st.header("Add Daily Job")
-
         with st.form("add_job"):
             job_date = st.date_input("Job Date", value=date.today())
             start_time = st.text_input("Start Time", placeholder="Example: 8:00 AM")
@@ -128,7 +95,6 @@ if mode == "Admin Login":
             estimated_hours = st.number_input("Estimated Hours", min_value=0.0, value=2.0, step=0.5)
             job_notes = st.text_area("Job Notes", placeholder="Pets, gate code, priority areas, supplies, etc.")
             submitted = st.form_submit_button("➕ Add Job")
-
             if submitted:
                 if not start_time or not client_name or not address:
                     st.error("Please enter start time, client name, and address.")
@@ -151,25 +117,64 @@ if mode == "Admin Login":
         st.subheader("Current Schedule")
         st.dataframe(load_jobs(), use_container_width=True)
 
-    elif page == "View Schedule":
-        st.header("Full Schedule")
+    elif page == "Manage Schedule":
+        st.header("Manage Schedule")
         jobs = load_jobs()
         if jobs.empty:
             st.write("No jobs added yet.")
-        else:
-            filter_date = st.date_input("Date", value=date.today())
-            filter_team = st.selectbox("Team", ["All Teams"] + list(TEAMS.keys()))
-            df = jobs[jobs["Date"] == filter_date.strftime("%Y-%m-%d")]
-            if filter_team != "All Teams":
-                df = df[df["Team"] == filter_team]
-            st.dataframe(df, use_container_width=True)
+            st.stop()
 
-            st.download_button(
-                "⬇️ Download Schedule",
-                data=jobs.to_csv(index=False).encode("utf-8"),
-                file_name="daily_jobs.csv",
-                mime="text/csv"
-            )
+        filter_date = st.date_input("Filter by Date", value=date.today())
+        filter_team = st.selectbox("Filter by Team", ["All Teams"] + list(TEAMS.keys()))
+
+        filtered = jobs[jobs["Date"] == filter_date.strftime("%Y-%m-%d")]
+        if filter_team != "All Teams":
+            filtered = filtered[filtered["Team"] == filter_team]
+
+        st.subheader("Filtered Jobs")
+        st.dataframe(filtered, use_container_width=True)
+
+        st.divider()
+        st.subheader("Delete One Job")
+        if filtered.empty:
+            st.info("No jobs match this filter.")
+        else:
+            job_options = []
+            for idx, row in filtered.iterrows():
+                label = f"{row['Date']} | {row['Start Time']} | {row['Team']} | {row['Client Name']} | {row['Address']}"
+                job_options.append((idx, label))
+            selected_idx = st.selectbox("Select job to delete", options=[x[0] for x in job_options], format_func=lambda x: dict(job_options)[x])
+            confirm_delete = st.checkbox("I understand this will delete the selected job.")
+            if st.button("🗑️ Delete Selected Job", type="primary"):
+                if confirm_delete:
+                    jobs = jobs.drop(index=selected_idx).reset_index(drop=True)
+                    save_jobs(jobs)
+                    st.success("Selected job deleted. Refresh if needed.")
+                else:
+                    st.error("Please check the confirmation box first.")
+
+        st.divider()
+        st.subheader("Clear Schedule")
+        col_a, col_b = st.columns(2)
+        with col_a:
+            confirm_clear_filtered = st.checkbox("Confirm clear filtered jobs")
+            if st.button("🧹 Clear Filtered Jobs"):
+                if confirm_clear_filtered:
+                    jobs = jobs.drop(index=filtered.index).reset_index(drop=True)
+                    save_jobs(jobs)
+                    st.success("Filtered jobs cleared.")
+                else:
+                    st.error("Please confirm first.")
+        with col_b:
+            confirm_clear_all = st.checkbox("Confirm clear ALL jobs")
+            if st.button("🚨 Clear ALL Jobs"):
+                if confirm_clear_all:
+                    save_jobs(pd.DataFrame(columns=JOB_COLUMNS))
+                    st.success("All jobs cleared.")
+                else:
+                    st.error("Please confirm first.")
+
+        st.download_button("⬇️ Download Full Schedule", data=jobs.to_csv(index=False).encode("utf-8"), file_name="daily_jobs.csv", mime="text/csv")
 
     elif page == "Time Logs":
         st.header("Time Logs")
@@ -178,60 +183,37 @@ if mode == "Admin Login":
             st.write("No time records yet.")
         else:
             st.dataframe(logs.sort_values(by="Timestamp", ascending=False), use_container_width=True)
-            st.download_button(
-                "⬇️ Download Time Log",
-                data=logs.to_csv(index=False).encode("utf-8"),
-                file_name="team_time_log.csv",
-                mime="text/csv"
-            )
+            st.download_button("⬇️ Download Time Log", data=logs.to_csv(index=False).encode("utf-8"), file_name="team_time_log.csv", mime="text/csv")
 
 else:
     st.header("Team Login")
-
     team = st.selectbox("Select Team", list(TEAM_PINS.keys()))
     pin = st.text_input("Team PIN", type="password")
-
     if pin != TEAM_PINS[team]:
         st.warning("Enter your team PIN to see your jobs.")
         st.stop()
 
     st.success(f"{team} access granted.")
-
     selected_date = st.date_input("Schedule Date", value=date.today())
-
-    employees = st.multiselect(
-        "Employees Working",
-        EMPLOYEES,
-        default=TEAMS[team]
-    )
+    employees = st.multiselect("Employees Working", EMPLOYEES, default=TEAMS[team])
 
     jobs = load_jobs()
     if jobs.empty:
         st.warning("No jobs added yet.")
         st.stop()
 
-    team_jobs = jobs[
-        (jobs["Date"] == selected_date.strftime("%Y-%m-%d")) &
-        (jobs["Team"] == team)
-    ]
-
+    team_jobs = jobs[(jobs["Date"] == selected_date.strftime("%Y-%m-%d")) & (jobs["Team"] == team)]
     if team_jobs.empty:
         st.warning("No jobs found for your team/date.")
         st.stop()
 
     st.subheader("Your Team Jobs")
-
     options = []
     for idx, row in team_jobs.iterrows():
         label = f"{row['Start Time']} — {row['Client Name']} — {row['Address']}"
         options.append((idx, label))
 
-    selected_idx = st.selectbox(
-        "Select Job",
-        options=[x[0] for x in options],
-        format_func=lambda x: dict(options)[x]
-    )
-
+    selected_idx = st.selectbox("Select Job", options=[x[0] for x in options], format_func=lambda x: dict(options)[x])
     job = jobs.loc[selected_idx]
 
     st.markdown(f"""
@@ -242,12 +224,10 @@ else:
     **Estimated Hours:** {job['Estimated Hours']}  
     **Notes:** {job['Job Notes']}
     """)
-
     map_query = str(job["Address"]).replace(" ", "+")
     st.markdown(f"[🗺️ Open in Google Maps](https://www.google.com/maps/search/?api=1&query={map_query})")
 
     employee_notes = st.text_area("Employee Notes", placeholder="Add notes for this job, if needed.")
-
     st.divider()
 
     def valid():
@@ -257,24 +237,20 @@ else:
         return True
 
     col1, col2 = st.columns(2)
-
     with col1:
         if st.button("✅ Clock In Team", use_container_width=True):
             if valid():
                 save_time_event("Clock In", employees, team, job, employee_notes)
                 st.success("Clock In saved.")
-
         if st.button("🍽️ Lunch Start", use_container_width=True):
             if valid():
                 save_time_event("Lunch Start", employees, team, job, employee_notes)
                 st.success("Lunch Start saved.")
-
     with col2:
         if st.button("🔁 Lunch End", use_container_width=True):
             if valid():
                 save_time_event("Lunch End", employees, team, job, employee_notes)
                 st.success("Lunch End saved.")
-
         if st.button("🛑 Clock Out Team", use_container_width=True):
             if valid():
                 save_time_event("Clock Out", employees, team, job, employee_notes)
