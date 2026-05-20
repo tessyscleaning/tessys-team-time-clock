@@ -30,9 +30,9 @@ EMPLOYEES = [
 ]
 
 TEAMS = {
-    "Team 1": ["Employee 1", "Employee 2", "Employee 3"],
-    "Team 2": ["Employee 4", "Employee 5"],
-    "Team 3": ["Employee 6", "Employee 7"],
+    "Team 1": ["Kenny Galindo Gomez", "Yesenia Chavez", "Yohana Beatriz Ticas Contreras"],
+    "Team 2": ["Iris L Rivas Martinez", "Olivia Rosales"],
+    "Team 3": ["Lidia I Figueroa Campos", "Employee 7"],
 }
 
 SERVICE_TYPES = [
