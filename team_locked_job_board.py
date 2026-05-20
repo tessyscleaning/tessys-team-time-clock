@@ -1,10 +1,12 @@
 import streamlit as st
 from datetime import datetime, date
+from zoneinfo import ZoneInfo
 from pathlib import Path
 import pandas as pd
 
 st.set_page_config(page_title="Tessy's Team-Locked Job Board", page_icon="🧽", layout="centered")
 
+LOCAL_TIMEZONE = ZoneInfo("America/Los_Angeles")
 JOBS_FILE = Path("daily_jobs.csv")
 TIME_LOG_FILE = Path("team_time_log.csv")
 
@@ -28,7 +30,10 @@ TEAMS = {
 
 SERVICE_TYPES = ["Recurring Cleaning", "Deep Cleaning", "Move-In / Move-Out", "Window Washing", "Other"]
 JOB_COLUMNS = ["Date", "Start Time", "Client Name", "Address", "Service Type", "Team", "Estimated Hours", "Job Notes"]
-TIME_COLUMNS = ["Date", "Time", "Timestamp", "Event", "Employee Name", "Team", "Client Name", "Job Address", "Service Type", "Job Notes", "Employee Notes"]
+TIME_COLUMNS = ["Date", "Time", "Timestamp", "Time Zone", "Event", "Employee Name", "Team", "Client Name", "Job Address", "Service Type", "Job Notes", "Employee Notes"]
+
+def local_now():
+    return datetime.now(LOCAL_TIMEZONE)
 
 def load_jobs():
     if JOBS_FILE.exists():
@@ -40,17 +45,22 @@ def save_jobs(df):
 
 def load_time_log():
     if TIME_LOG_FILE.exists():
-        return pd.read_csv(TIME_LOG_FILE)
+        df = pd.read_csv(TIME_LOG_FILE)
+        for col in TIME_COLUMNS:
+            if col not in df.columns:
+                df[col] = ""
+        return df
     return pd.DataFrame(columns=TIME_COLUMNS)
 
 def save_time_event(event_type, employees, team, job_row, employee_notes):
-    now = datetime.now()
+    now = local_now()
     rows = []
     for employee in employees:
         rows.append({
             "Date": now.strftime("%Y-%m-%d"),
             "Time": now.strftime("%I:%M:%S %p"),
             "Timestamp": now.isoformat(timespec="seconds"),
+            "Time Zone": "America/Los_Angeles",
             "Event": event_type,
             "Employee Name": employee,
             "Team": team,
@@ -69,7 +79,7 @@ st.markdown("""
 **Tessy's Residential Cleaning Service**  
 📞 925-349-5668
 """)
-st.info("Employees use their team PIN and only see their own team's jobs. Admin can add, delete, and clear schedules.")
+st.info("Times are recorded in California time: America/Los_Angeles.")
 st.divider()
 
 mode = st.radio("Login Type", ["Team Login", "Admin Login"], horizontal=True)
@@ -139,10 +149,7 @@ if mode == "Admin Login":
         if filtered.empty:
             st.info("No jobs match this filter.")
         else:
-            job_options = []
-            for idx, row in filtered.iterrows():
-                label = f"{row['Date']} | {row['Start Time']} | {row['Team']} | {row['Client Name']} | {row['Address']}"
-                job_options.append((idx, label))
+            job_options = [(idx, f"{row['Date']} | {row['Start Time']} | {row['Team']} | {row['Client Name']} | {row['Address']}") for idx, row in filtered.iterrows()]
             selected_idx = st.selectbox("Select job to delete", options=[x[0] for x in job_options], format_func=lambda x: dict(job_options)[x])
             confirm_delete = st.checkbox("I understand this will delete the selected job.")
             if st.button("🗑️ Delete Selected Job", type="primary"):
@@ -194,6 +201,7 @@ else:
         st.stop()
 
     st.success(f"{team} access granted.")
+    st.write("Current California time:", local_now().strftime("%A, %B %d, %Y — %I:%M:%S %p"))
     selected_date = st.date_input("Schedule Date", value=date.today())
     employees = st.multiselect("Employees Working", EMPLOYEES, default=TEAMS[team])
 
@@ -208,11 +216,7 @@ else:
         st.stop()
 
     st.subheader("Your Team Jobs")
-    options = []
-    for idx, row in team_jobs.iterrows():
-        label = f"{row['Start Time']} — {row['Client Name']} — {row['Address']}"
-        options.append((idx, label))
-
+    options = [(idx, f"{row['Start Time']} — {row['Client Name']} — {row['Address']}") for idx, row in team_jobs.iterrows()]
     selected_idx = st.selectbox("Select Job", options=[x[0] for x in options], format_func=lambda x: dict(options)[x])
     job = jobs.loc[selected_idx]
 
@@ -241,20 +245,20 @@ else:
         if st.button("✅ Clock In Team", use_container_width=True):
             if valid():
                 save_time_event("Clock In", employees, team, job, employee_notes)
-                st.success("Clock In saved.")
+                st.success("Clock In saved with California time.")
         if st.button("🍽️ Lunch Start", use_container_width=True):
             if valid():
                 save_time_event("Lunch Start", employees, team, job, employee_notes)
-                st.success("Lunch Start saved.")
+                st.success("Lunch Start saved with California time.")
     with col2:
         if st.button("🔁 Lunch End", use_container_width=True):
             if valid():
                 save_time_event("Lunch End", employees, team, job, employee_notes)
-                st.success("Lunch End saved.")
+                st.success("Lunch End saved with California time.")
         if st.button("🛑 Clock Out Team", use_container_width=True):
             if valid():
                 save_time_event("Clock Out", employees, team, job, employee_notes)
-                st.success("Clock Out saved.")
+                st.success("Clock Out saved with California time.")
 
 st.divider()
-st.caption("Starter version uses CSV storage. For long-term multi-device use, upgrade to Google Sheets or a database.")
+st.caption("Starter version uses CSV storage. Times are saved in America/Los_Angeles.")
